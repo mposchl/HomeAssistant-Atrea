@@ -10,6 +10,7 @@ from .const import (
     CONF_PRESETS,
     ALL_PRESET_LIST,
     DEFAULT_FAN_MODE_LIST,
+    CONTROL_MODE_R_5,
 )
 from pyatrea import Atrea
 
@@ -251,14 +252,28 @@ class AtreaOptionsFlowHandler(config_entries.OptionsFlow):
                     errors["base"] = "unknown"
                     LOGGER.error(e)
 
-        LOGGER.debug("Preparing form... password, name, fan_modes, presets header")
+        # R_5 detection — skry pole 'Výkonové stupně (procenta)' pro R_5 jednotky,
+        # protože pro ně se výkon nastavuje přes discrete Min/Norm/Max (ne procenta).
+        is_r5 = False
+        try:
+            atrea = Atrea(host, port, password)
+            control_mode_val = await self.hass.async_add_executor_job(
+                atrea.getValue, "H10510"
+            )
+            if control_mode_val is not None and int(control_mode_val) == CONTROL_MODE_R_5:
+                is_r5 = True
+        except Exception as e:
+            LOGGER.debug("Nelze určit control mode (H10510), ponechám fan_modes pole: %s", e)
+
+        LOGGER.debug("Preparing form... password, name, fan_modes (if not R_5), presets")
         spec = {
             vol.Optional(CONF_PASSWORD, description={"suggested_value": password}): str,
             vol.Optional(CONF_NAME, description={"suggested_value": name}): str,
-            vol.Optional(
-                CONF_FAN_MODES, description={"suggested_value": fan_modes}
-            ): str,
         }
+        if not is_r5:
+            spec[
+                vol.Optional(CONF_FAN_MODES, description={"suggested_value": fan_modes})
+            ] = str
 
         LOGGER.debug("Preparing form... presets")
         for preset in ALL_PRESET_LIST:

@@ -58,7 +58,7 @@
           "D2": "D2",
           "D3": "D3",
           "D4": "D4",
-          "fan_modes": "Výkonové stupně (procenta)"
+          "fan_modes": "Výkonové stupně Duplex (procenta, 12–100)"
         },
         "description": "Uprav nastavení tvé Atrea jednotky."
       }
@@ -83,10 +83,7 @@
             "name": "Výkon"
           },
           "preset_mode": {
-            "name": "Režim"
-          },
-          "hvac_mode": {
-            "name": "Řízení VZT"
+            "name": "Předvolba"
           }
         }
       }
