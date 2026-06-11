@@ -40,9 +40,27 @@ from .const import (
     CONF_PRESETS,
     DEFAULT_FAN_MODE_LIST,
     ALL_PRESET_LIST,
+    PRESET_LABELS_CZ,
     ICONS,
     HVAC_MODES,
+    CONTROL_MODE_R_5,
+    r5_decode_fan_value,
+    r5_fan_modes_for_preset,
+    r5_fan_value_for_preset,
 )
+
+
+def _to_cz(preset_en):
+    """Map EN preset ID na CZ display label, fallback na EN pokud chybí."""
+    return PRESET_LABELS_CZ.get(preset_en, preset_en)
+
+
+def _from_cz(preset_cz):
+    """Reverse map CZ label na EN preset ID, fallback na input pokud už je EN."""
+    for en, cz in PRESET_LABELS_CZ.items():
+        if cz == preset_cz:
+            return en
+    return preset_cz
 
 
 async def async_setup_entry(
@@ -71,6 +89,9 @@ async def async_setup_entry(
 
 
 class AtreaDevice(ClimateEntity):
+    _attr_translation_key = "atrea"
+    _attr_has_entity_name = False
+
     def __init__(
         self, hass, entry, sensor_name, fan_list, preset_list,
     ):
@@ -99,11 +120,23 @@ class AtreaDevice(ClimateEntity):
 
         self._current_preset = None
         self._current_hvac_mode = None
-        self._unit = "Status"
         self.air_handling_control = None
         self._enabled = False
         self._cooling = -1
         self._heating = -1
+
+        # custom
+        self._da1 = 0.0
+
+        # R_5 detection — read H10510 control mode register.
+        # Pokud je 4 (R_5 series), použijeme discrete fan modes místo procent.
+        try:
+            control_mode_val = self.atrea.getValue("H10510")
+            self._control_mode = int(control_mode_val) if control_mode_val is not None else CONTROL_MODE_R_5
+        except Exception:
+            self._control_mode = CONTROL_MODE_R_5  # fallback for R_5 (most common new units)
+
+        self._is_r5 = self._control_mode == CONTROL_MODE_R_5
 
         self.updatePresetList(preset_list, False)
         self.updateFanList(fan_list, False)
@@ -165,23 +198,16 @@ class AtreaDevice(ClimateEntity):
         return True
 
     @property
-    def unit_of_measurement(self):
-        return self._unit
-
-    @property
     def icon(self):
         if len(self._alerts) > 0:
             return "mdi:fan-alert"
-        elif self.fan_mode == "0%":
+        # Off detection: R_5 mode = "Vypnuto", Duplex = "0%"
+        elif self.fan_mode in ("0%", "Vypnuto"):
             return "mdi:fan-off"
         elif self._current_preset in ICONS:
             return ICONS[self._current_preset]
         else:
             return "mdi:fan"
-
-    @property
-    def state(self):
-        return self._current_hvac_mode
 
     @property
     def supported_features(self):
@@ -212,6 +238,8 @@ class AtreaDevice(ClimateEntity):
         attributes["active_inputs"] = self._active_inputs
         attributes["forced_mode"] = self._forced_mode.name
         attributes["current_power"] = self._current_power
+
+        attributes["current_da1_output"] = self._da1
 
         if self._heating == 1:
             attributes["hvac_action"] = HVACAction.HEATING
@@ -244,13 +272,13 @@ class AtreaDevice(ClimateEntity):
         if self._current_preset.name and self._current_preset.name in self._userLabels:
             return self._userLabels[self._current_preset.name]
         elif self._current_preset < len(ALL_PRESET_LIST):
-            return ALL_PRESET_LIST[self._current_preset]
+            return _to_cz(ALL_PRESET_LIST[self._current_preset])
         else:
             return STATE_UNKNOWN
 
     @property
     def preset_modes(self):
-        return self._preset_list
+        return [_to_cz(p) for p in self._preset_list]
 
     @property
     def current_temperature(self):
@@ -270,6 +298,12 @@ class AtreaDevice(ClimateEntity):
 
     @property
     def fan_modes(self):
+        if self._is_r5:
+            # Dynamic per-preset list — fan modes záleží na aktuálním presetu
+            current_preset_en = None
+            if self._current_preset is not None and self._current_preset < len(ALL_PRESET_LIST):
+                current_preset_en = ALL_PRESET_LIST[self._current_preset]
+            return r5_fan_modes_for_preset(current_preset_en)
         return self._fan_list
 
     @property
@@ -335,10 +369,18 @@ class AtreaDevice(ClimateEntity):
             elif "H01005" in status:
                 self._requested_power = int(self.atrea.getValue("H01005"))
 
-            if "H01001" in status:
-                self._current_fan_mode = str(int(self.atrea.getValue("H01001"))) + "%"
+            if self._is_r5:
+                # R_5 mode: read H10704 → decode na discrete label
+                if "H10704" in status:
+                    self._current_fan_mode = r5_decode_fan_value(self.atrea.getValue("H10704"))
+                else:
+                    self._current_fan_mode = r5_decode_fan_value(self._requested_power)
             else:
-                self._current_fan_mode = str(self._requested_power) + "%"
+                # Duplex mode: zachovat procenta logiku
+                if "H01001" in status:
+                    self._current_fan_mode = str(int(self.atrea.getValue("H01001"))) + "%"
+                else:
+                    self._current_fan_mode = str(self._requested_power) + "%"
 
             if "C10215" in status:
                 self._heating = int(status["C10215"])
@@ -349,6 +391,9 @@ class AtreaDevice(ClimateEntity):
                 self._cooling = int(status["C10216"])
             else:
                 self._cooling = -1
+
+            if "H10207" in status:
+                self._da1 = float(status["H10207"]) / 1000
 
             # D1..D4 inputs are reported in D10200..D10203
             for inpt in range(4):
@@ -384,7 +429,7 @@ class AtreaDevice(ClimateEntity):
             else:
                 self.air_handling_control = "Unknown (" + str(program) + ")"
 
-            if self._current_fan_mode == "0%":
+            if self._current_fan_mode in ("0%", "Vypnuto"):
                 self._current_hvac_mode = HVACMode.OFF
 
             # todo fix warning not translated
@@ -403,6 +448,33 @@ class AtreaDevice(ClimateEntity):
             self.async_schedule_update_ha_state(True)
 
     async def async_set_fan_mode(self, fan_mode):
+        if self._is_r5:
+            # R_5 mode — discrete labels (Vypnuto / Min / Norm / Max / Min/Min, ...)
+            current_preset_en = None
+            if self._current_preset is not None and self._current_preset < len(ALL_PRESET_LIST):
+                current_preset_en = ALL_PRESET_LIST[self._current_preset]
+            fan_value = r5_fan_value_for_preset(current_preset_en, fan_mode)
+            if fan_value is None:
+                LOGGER.warn("Unsupported R_5 fan_mode='%s' for preset='%s'", fan_mode, current_preset_en)
+                return
+
+            if (
+                await self.hass.async_add_executor_job(self.atrea.getProgram)
+                == AtreaProgram.WEEKLY
+            ):
+                self.atrea.setProgram(AtreaProgram.TEMPORARY)
+            # pyatrea setPower akceptuje raw H10708/H10714 hodnotu
+            self.atrea.setPower(fan_value)
+
+            self.updatePending = True
+            await self.hass.async_add_executor_job(self.atrea.exec)
+            await self._coordinator.async_request_refresh()
+            await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
+            self.updatePending = False
+            self.manualUpdate()
+            return
+
+        # Duplex mode — zachovat percentual logiku
         fan_percent = int(re.sub("[^0-9]", "", fan_mode))
         if fan_percent < 12:
             fan_percent = 12
@@ -494,9 +566,11 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
     async def async_set_preset_mode(self, preset_mode):
+        # UI dropdown vrací CZ label — reverse map na EN ID před lookup do AtreaMode
+        preset_en = _from_cz(preset_mode)
         mode = None
         try:
-            mode = AtreaMode(ALL_PRESET_LIST.index(preset_mode))
+            mode = AtreaMode(ALL_PRESET_LIST.index(preset_en))
         except ValueError:
             LOGGER.warn("Chosen preset=%s is incorrect preset.", str(preset_mode))
             return

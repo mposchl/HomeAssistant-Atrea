@@ -44,6 +44,27 @@ ALL_PRESET_LIST = [
     "D4",
 ]
 
+# CZ display labels — mapping z EN internal IDs na CZ názvy podle RD5 ovládací jednotky.
+# ALL_PRESET_LIST zůstává EN (stable internal IDs, nerozbíjí existing config entries).
+# Display překlad se aplikuje v climate.py preset_mode/preset_modes properties.
+PRESET_LABELS_CZ = {
+    "Off": "Vypnuto",
+    "Automatic": "Automat",
+    "Ventilation": "Větrání",
+    "Circulation and Ventilation": "Cirkulace s větráním",
+    "Circulation": "Cirkulace",
+    "Night precooling": "Noční předchlazení",
+    "Disbalance": "Rozvážení",
+    "Overpressure": "Přetlakové větrání",
+    "Periodic ventilation": "Periodické větrání",
+    "Startup": "Náběh",
+    "Rundown": "Doběh",
+    "Defrosting": "Odmrazování",
+    "External": "Externí",
+    "HP defrosting": "Odmrazování TČ",
+    # IN1, IN2, D1-D4 zůstávají jako technické identifikátory bez překladu
+}
+
 ICONS = {
     AtreaMode.OFF: "mdi:fan-off",
     AtreaMode.AUTOMATIC: "mdi:fan",
@@ -67,3 +88,103 @@ ICONS = {
 }
 
 HVAC_MODES = [HVACMode.OFF, HVACMode.AUTO, HVACMode.FAN_ONLY]
+
+
+# === RD5 Fan Mode Support pro R_5 jednotky (H10510=4) ===
+# Pro R_5 série Atrea nepoužívá procenta, ale discrete hodnoty H10704/H10708.
+# Reference: RD5 Modbus parameters dokumentace, tab.4.
+
+# Control mode register hodnoty (z H10510)
+CONTROL_MODE_DIRECT = 0       # Přímé řízení (procenta 12-100%)
+CONTROL_MODE_CONST_FLOW = 1   # Konstantní průtok (1-100%)
+CONTROL_MODE_CONST_PRESSURE = 2  # Konstantní tlak (1=NOC, 2=DEN)
+CONTROL_MODE_IN1_IN2 = 3      # Dle IN1/IN2 (12-100%)
+CONTROL_MODE_R_5 = 4          # R_5 jednotky (discrete + kombinace)
+
+# Modbus hodnoty pro H10704/H10708 v R_5 módu (label → register value)
+R5_FAN_VENTILATION = {
+    "Vypnuto": 0,
+    "Min": 10,
+    "Norm": 11,
+    "Max": 12,
+}
+
+R5_FAN_CIRCULATION = {
+    "Vypnuto": 0,
+    "Min": 20,
+    "Norm": 21,
+    "Max": 22,
+}
+
+# Cirkulace s větráním — formát "cirkulace/větrání" (= výkon cirk / výkon vět)
+R5_FAN_CIRC_VENT = {
+    "Vypnuto": 0,
+    "Min/Min": 30,
+    "Min/Norm": 31,
+    "Min/Max": 32,
+    "Norm/Min": 33,
+    "Norm/Norm": 34,
+    "Norm/Max": 35,
+    "Max/Min": 36,
+    "Max/Norm": 37,
+    "Max/Max": 38,
+}
+
+# Default fan_modes pro generic preset (Off, Automatic, Night precooling, ...) v R_5
+R5_FAN_GENERIC = {
+    "Vypnuto": 0,
+    "Min": 10,
+    "Norm": 11,
+    "Max": 12,
+}
+
+# Reverse mapping pro decode H10704 read value → label
+def r5_decode_fan_value(value):
+    """Decode H10704 numeric value na human-readable label."""
+    if value is None:
+        return None
+    v = int(value)
+    if v == 0:
+        return "Vypnuto"
+    elif 10 <= v <= 12:
+        return {10: "Min", 11: "Norm", 12: "Max"}[v]
+    elif 20 <= v <= 22:
+        return {20: "Min", 21: "Norm", 22: "Max"}[v]
+    elif 30 <= v <= 38:
+        labels = ["Min/Min", "Min/Norm", "Min/Max",
+                  "Norm/Min", "Norm/Norm", "Norm/Max",
+                  "Max/Min", "Max/Norm", "Max/Max"]
+        return labels[v - 30]
+    return f"Neznámý ({v})"
+
+
+def r5_fan_modes_for_preset(preset_en):
+    """Vrátí dostupné fan_modes labels pro daný preset (EN ID)."""
+    if preset_en == "Off":
+        return ["Vypnuto"]
+    elif preset_en == "Automatic":
+        # Auto = řízeno týdenním plánem, výkon se nenastavuje ručně
+        return list(R5_FAN_VENTILATION.keys())
+    elif preset_en == "Ventilation":
+        return list(R5_FAN_VENTILATION.keys())
+    elif preset_en == "Circulation":
+        return list(R5_FAN_CIRCULATION.keys())
+    elif preset_en == "Circulation and Ventilation":
+        return list(R5_FAN_CIRC_VENT.keys())
+    else:
+        # Pro presets typu Night precooling, Disbalance, Overpressure, ...
+        return list(R5_FAN_GENERIC.keys())
+
+
+def r5_fan_value_for_preset(preset_en, fan_label):
+    """Map (preset, label) → Modbus value pro H10708 zápis."""
+    if fan_label == "Vypnuto":
+        return 0
+    if preset_en == "Ventilation":
+        return R5_FAN_VENTILATION.get(fan_label)
+    elif preset_en == "Circulation":
+        return R5_FAN_CIRCULATION.get(fan_label)
+    elif preset_en == "Circulation and Ventilation":
+        return R5_FAN_CIRC_VENT.get(fan_label)
+    else:
+        return R5_FAN_GENERIC.get(fan_label)
