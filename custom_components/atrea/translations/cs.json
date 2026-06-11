@@ -1,0 +1,95 @@
+{
+  "title": "Atrea",
+  "config": {
+    "flow_title": "Atrea: {name}",
+    "step": {
+      "ip": {
+        "data": {
+          "ip_address": "IP adresa",
+          "port": "Port"
+        },
+        "description": "Zadej IP adresu jednotky."
+      },
+      "auth": {
+        "data": {
+          "name": "Název",
+          "password": "Heslo"
+        },
+        "description": "Zadej heslo k jednotce."
+      }
+    },
+    "error": {
+      "not_atrea_unit": "Na této IP adrese není podporovaná jednotka Atrea",
+      "invalid_auth": "Špatné heslo nebo příliš mnoho přihlášených uživatelů.",
+      "unknown": "Neznámá chyba",
+      "connection_failed": "Připojení selhalo",
+      "already_configured": "IP adresa už je nakonfigurovaná"
+    },
+    "abort": {
+      "already_configured": "IP adresa už je nakonfigurovaná",
+      "not_atrea_unit": "Nalezené zařízení není podporovaná jednotka Atrea"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "name": "Název (volitelně)",
+          "presets": "Aktivní předvolby",
+          "ip_address": "IP adresa",
+          "password": "Heslo",
+          "Off": "Vypnuto",
+          "Automatic": "Automat",
+          "Ventilation": "Větrání",
+          "Circulation and Ventilation": "Cirkulace s větráním",
+          "Circulation": "Cirkulace",
+          "Night precooling": "Noční předchlazení",
+          "Disbalance": "Rozvážení",
+          "Overpressure": "Přetlakové větrání",
+          "Periodic ventilation": "Periodické větrání",
+          "Startup": "Náběh",
+          "Rundown": "Doběh",
+          "Defrosting": "Odmrazování",
+          "External": "Externí",
+          "HP defrosting": "Odmrazování TČ",
+          "IN1": "IN1",
+          "IN2": "IN2",
+          "D1": "D1",
+          "D2": "D2",
+          "D3": "D3",
+          "D4": "D4",
+          "fan_modes": "Výkonové stupně (procenta)"
+        },
+        "description": "Uprav nastavení tvé Atrea jednotky."
+      }
+    },
+    "error": {
+      "already_configured": "IP adresa už je nakonfigurovaná",
+      "invalid_auth": "Špatné heslo nebo příliš mnoho přihlášených uživatelů.",
+      "not_atrea_unit": "Nalezené zařízení není podporovaná jednotka Atrea",
+      "invalid_fan_mode": "Neplatný formát výkonových stupňů — použij pouze čárky a čísla 12 až 100."
+    }
+  },
+  "entity": {
+    "climate": {
+      "atrea": {
+        "state": {
+          "off": "Vypnuto",
+          "auto": "Týdenní program",
+          "fan_only": "Ruční"
+        },
+        "state_attributes": {
+          "fan_mode": {
+            "name": "Výkon"
+          },
+          "preset_mode": {
+            "name": "Režim"
+          },
+          "hvac_mode": {
+            "name": "Řízení VZT"
+          }
+        }
+      }
+    }
+  }
+}

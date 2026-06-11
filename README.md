@@ -1,6 +1,26 @@
-# HomeAssistant-Atrea
+# HomeAssistant-Atrea (fork: česká lokalizace + R_5)
 
 Custom component - climate platform - for Atrea ventilation units for Home Assistant
+
+## Tento fork
+
+Fork od [JurajNyiri/HomeAssistant-Atrea](https://github.com/JurajNyiri/HomeAssistant-Atrea) s těmito úpravami:
+
+- **Česká lokalizace** — kompletní překlad config flow, dialogu nastavení, názvů předvoleb (Větrání / Cirkulace / Cirkulace s větráním / Noční předchlazení / Rozvážení / Přetlakové větrání), HVAC módů (Vypnuto / Týdenní program / Ruční) a labelů atributů (Výkon / Režim / Řízení VZT).
+- **Nativní podpora jednotek řady R_5** (Modbus parameter `H10510=4`) — discrete výkonové stupně podle RD5 specifikace místo procent:
+  - Větrání / Cirkulace / další předvolby: `Vypnuto / Min / Norm / Max`
+  - Cirkulace s větráním: 9 kombinací (`Min/Min`, `Min/Norm`, ..., `Max/Max`) — formát „výkon cirkulace / výkon větrání"
+- **Oprava kompatibility s HA 2025.12+** — odstraněn deprecated `self.config_entry = config_entry` v `OptionsFlow.__init__`, který v HA 2025.12+ vedl k HTTP 500 v dialogu Konfigurace.
+
+**Backward compatibility:** Jednotky Duplex (H10510 ∈ {0, 1, 2, 3}) zachovávají původní procentuální logiku — nic se pro ně nemění.
+
+## Instalace přes HACS
+
+1. HACS → Integrations → ⋮ → **Custom repositories**
+2. URL: `https://github.com/mposchl/HomeAssistant-Atrea`
+3. Category: **Integration**
+4. Add → Install → restart Home Assistant
+5. Settings → Devices & Services → Add Integration → vyhledat „Atrea"
 
 ## Installation using HACS
 
