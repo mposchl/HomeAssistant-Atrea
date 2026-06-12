@@ -314,7 +314,7 @@ class AtreaDevice(ClimateEntity):
     async def async_update(self):
         if not self.updatePending:
             self.updatePending = True
-            await self._coordinator.async_request_refresh()
+            await self._coordinator.async_refresh()
             await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
             self.manualUpdate()
             self.updatePending = False
@@ -475,7 +475,7 @@ class AtreaDevice(ClimateEntity):
 
             self.updatePending = True
             await self.hass.async_add_executor_job(self.atrea.exec)
-            await self._coordinator.async_request_refresh()
+            await self._coordinator.async_refresh()
             await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
             self.updatePending = False
             self.manualUpdate()
@@ -498,7 +498,7 @@ class AtreaDevice(ClimateEntity):
 
             self.updatePending = True
             await self.hass.async_add_executor_job(self.atrea.exec)
-            await self._coordinator.async_request_refresh()
+            await self._coordinator.async_refresh()
             await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
             self.updatePending = False
             self.manualUpdate()
@@ -520,7 +520,7 @@ class AtreaDevice(ClimateEntity):
 
         self.updatePending = True
         await self.hass.async_add_executor_job(self.atrea.exec)
-        await self._coordinator.async_request_refresh()
+        await self._coordinator.async_refresh()
         await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
         self.manualUpdate()
         self.updatePending = False
@@ -539,7 +539,7 @@ class AtreaDevice(ClimateEntity):
 
         self.updatePending = True
         await self.hass.async_add_executor_job(self.atrea.exec)
-        await self._coordinator.async_request_refresh()
+        await self._coordinator.async_refresh()
         await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
         self.manualUpdate()
         self.updatePending = False
@@ -571,7 +571,7 @@ class AtreaDevice(ClimateEntity):
 
         self.updatePending = True
         await self.hass.async_add_executor_job(self.atrea.exec)
-        await self._coordinator.async_request_refresh()
+        await self._coordinator.async_refresh()
         await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
         self.manualUpdate()
         self.updatePending = False
@@ -600,10 +600,32 @@ class AtreaDevice(ClimateEntity):
 
         self.updatePending = True
         await self.hass.async_add_executor_job(self.atrea.exec)
-        await self._coordinator.async_request_refresh()
+        await self._coordinator.async_refresh()
         await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
         self.manualUpdate()
         self.updatePending = False
+
+        # Sync requested power (H10714) with actual (H10704) after preset change.
+        # Atrea automatically sets H10704 to a sensible default for the new
+        # preset (e.g. Norm-Vent after switching to Ventilation), but H10714
+        # keeps the previous request value, leaving the 'requested_power'
+        # attribute inconsistent with the actual unit state. Idempotent
+        # setPower with the freshly read H10704 value harmonizes both.
+        if self._is_r5:
+            current_power = await self.hass.async_add_executor_job(
+                self.atrea.getValue, "H10704"
+            )
+            if current_power is not None:
+                self.atrea.commands.clear()
+                self.atrea.setPower(int(current_power))
+                self.updatePending = True
+                await self.hass.async_add_executor_job(self.atrea.exec)
+                await self._coordinator.async_refresh()
+                await self.hass.async_add_executor_job(
+                    time.sleep, UPDATE_DELAY / 1000
+                )
+                self.manualUpdate()
+                self.updatePending = False
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
@@ -615,7 +637,7 @@ class AtreaDevice(ClimateEntity):
             self.atrea.setTemperature(temperature)
             self.updatePending = True
             await self.hass.async_add_executor_job(self.atrea.exec)
-            await self._coordinator.async_request_refresh()
+            await self._coordinator.async_refresh()
             await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
             self.manualUpdate()
             self.updatePending = False
