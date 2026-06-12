@@ -591,6 +591,21 @@ class AtreaDevice(ClimateEntity):
             LOGGER.warning("Chosen preset=%s is incorrect preset.", str(preset_mode))
             return
 
+        # Capture H10704 BEFORE setMode so the sync poller below has a
+        # reliable baseline to detect when Atrea has applied the new
+        # preset's auto-default value. If we captured after setMode +
+        # refresh, Atrea may have already updated H10704 and we'd then
+        # wait for a second change that never comes.
+        initial_h10704_pre = None
+        if self._is_r5:
+            initial_h10704_pre = await self.hass.async_add_executor_job(
+                self.atrea.getValue, "H10704"
+            )
+            LOGGER.warning(
+                "[atrea-diag] R_5 preset sync: initial H10704 (pre-setMode) = %s",
+                initial_h10704_pre,
+            )
+
         self.atrea.commands.clear()
 
         if mode == AtreaMode.OFF:
@@ -620,15 +635,10 @@ class AtreaDevice(ClimateEntity):
         # poll up to 60s waiting for it to change (= Atrea finished the
         # switch). Then idempotent setPower with the new value harmonizes
         # H10714 with H10704.
-        if self._is_r5:
-            # Initial H10704 BEFORE the unit reacts (captured from the
-            # pre-setMode status we already have in coordinator cache).
-            initial_h10704 = await self.hass.async_add_executor_job(
-                self.atrea.getValue, "H10704"
-            )
+        if self._is_r5 and initial_h10704_pre is not None:
             LOGGER.warning(
-                "[atrea-diag] R_5 preset sync: initial H10704 = %s, polling for change",
-                initial_h10704,
+                "[atrea-diag] R_5 preset sync: polling for H10704 to change from %s",
+                initial_h10704_pre,
             )
             new_h10704 = None
             # 5s polling interval per RD5 spec (PDF, "alespoň 5s interval mezi
@@ -641,7 +651,7 @@ class AtreaDevice(ClimateEntity):
                 current = await self.hass.async_add_executor_job(
                     self.atrea.getValue, "H10704"
                 )
-                if current is not None and current != initial_h10704:
+                if current is not None and current != initial_h10704_pre:
                     new_h10704 = current
                     LOGGER.warning(
                         "[atrea-diag] R_5 preset sync: H10704 changed to %s after %ds",
