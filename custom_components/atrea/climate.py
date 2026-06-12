@@ -612,12 +612,25 @@ class AtreaDevice(ClimateEntity):
         # attribute inconsistent with the actual unit state. Idempotent
         # setPower with the freshly read H10704 value harmonizes both.
         if self._is_r5:
+            # Atrea needs a moment to internally apply the preset change
+            # and update H10704. Without the delay we read stale value.
+            await self.hass.async_add_executor_job(time.sleep, 1.5)
+            # Force fresh status from the unit — pyatrea getStatus() caches
+            # the response, getValue() then returns stale data.
+            await self.hass.async_add_executor_job(self.atrea.getStatus, False)
             current_power = await self.hass.async_add_executor_job(
                 self.atrea.getValue, "H10704"
             )
+            LOGGER.debug(
+                "R_5 preset sync: H10704 after preset change = %s", current_power
+            )
             if current_power is not None:
                 self.atrea.commands.clear()
-                self.atrea.setPower(int(current_power))
+                power_int = int(current_power)
+                ok = self.atrea.setPower(power_int)
+                LOGGER.debug(
+                    "R_5 preset sync: setPower(%d) returned %s", power_int, ok
+                )
                 self.updatePending = True
                 await self.hass.async_add_executor_job(self.atrea.exec)
                 await self._coordinator.async_refresh()
