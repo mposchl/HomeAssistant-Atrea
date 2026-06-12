@@ -611,29 +611,47 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
         # Sync requested power (H10714) with actual (H10704) after preset change.
-        # Atrea automatically sets H10704 to a sensible default for the new
-        # preset (e.g. Norm-Vent after switching to Ventilation), but H10714
-        # keeps the previous request value, leaving the 'requested_power'
-        # attribute inconsistent with the actual unit state. Idempotent
-        # setPower with the freshly read H10704 value harmonizes both.
+        # Atrea autoapplies a sensible default to H10704 after physically
+        # switching dampers (can take 30+s). H10714 keeps the previous
+        # request value, leaving 'requested_power' attribute inconsistent
+        # with the unit's actual state.
+        #
+        # Strategy: capture initial H10704 BEFORE we read fresh status, then
+        # poll up to 60s waiting for it to change (= Atrea finished the
+        # switch). Then idempotent setPower with the new value harmonizes
+        # H10714 with H10704.
         if self._is_r5:
-            # Atrea needs a moment to internally apply the preset change
-            # and update H10704. Without enough delay we read stale value.
-            # Empirically 1.5s wasn't enough on R-5 RA5 unit — bumped to 3s.
-            await self.hass.async_add_executor_job(time.sleep, 3.0)
-            # Force fresh status from the unit — pyatrea getStatus() caches
-            # the response, getValue() then returns stale data.
-            await self.hass.async_add_executor_job(self.atrea.getStatus, False)
-            current_power = await self.hass.async_add_executor_job(
+            # Initial H10704 BEFORE the unit reacts (captured from the
+            # pre-setMode status we already have in coordinator cache).
+            initial_h10704 = await self.hass.async_add_executor_job(
                 self.atrea.getValue, "H10704"
             )
             LOGGER.warning(
-                "[atrea-diag] R_5 preset sync: H10704 after preset change = %s",
-                current_power,
+                "[atrea-diag] R_5 preset sync: initial H10704 = %s, polling for change",
+                initial_h10704,
             )
-            if current_power is not None:
+            new_h10704 = None
+            # 5s polling interval per RD5 spec (PDF, "alespoň 5s interval mezi
+            # relacemi"), max 12 attempts = 60s ceiling for the physical preset
+            # switch (damper rotation can take that long on R-5 series).
+            for attempt in range(12):
+                await self.hass.async_add_executor_job(time.sleep, 5.0)
+                # Force fresh status — pyatrea caches by default.
+                await self.hass.async_add_executor_job(self.atrea.getStatus, False)
+                current = await self.hass.async_add_executor_job(
+                    self.atrea.getValue, "H10704"
+                )
+                if current is not None and current != initial_h10704:
+                    new_h10704 = current
+                    LOGGER.warning(
+                        "[atrea-diag] R_5 preset sync: H10704 changed to %s after %ds",
+                        current,
+                        (attempt + 1) * 5,
+                    )
+                    break
+            if new_h10704 is not None:
                 self.atrea.commands.clear()
-                power_int = int(current_power)
+                power_int = int(new_h10704)
                 ok = self.atrea.setPower(power_int)
                 LOGGER.warning(
                     "[atrea-diag] R_5 preset sync: setPower(%d) returned %s",
@@ -648,6 +666,10 @@ class AtreaDevice(ClimateEntity):
                 )
                 self.manualUpdate()
                 self.updatePending = False
+            else:
+                LOGGER.warning(
+                    "[atrea-diag] R_5 preset sync: H10704 unchanged after 60s (12×5s), skipping sync"
+                )
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""
