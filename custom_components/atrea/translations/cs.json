@@ -71,6 +71,19 @@
     }
   },
   "entity": {
+    "binary_sensor": {
+      "filter_dirty": {
+        "name": "Filtr zanesený"
+      },
+      "filter_period_expired": {
+        "name": "Filtr — interval výměny"
+      }
+    },
+    "button": {
+      "filter_reset": {
+        "name": "Reset intervalu výměny filtru"
+      }
+    },
     "climate": {
       "atrea": {
         "state": {
