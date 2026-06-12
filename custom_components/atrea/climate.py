@@ -577,8 +577,8 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
     async def async_set_preset_mode(self, preset_mode):
-        LOGGER.warning(
-            "[atrea-diag] async_set_preset_mode called with %s (is_r5=%s)",
+        LOGGER.debug(
+            "async_set_preset_mode called with %s (is_r5=%s)",
             preset_mode,
             self._is_r5,
         )
@@ -601,8 +601,8 @@ class AtreaDevice(ClimateEntity):
             initial_h10704_pre = await self.hass.async_add_executor_job(
                 self.atrea.getValue, "H10704"
             )
-            LOGGER.warning(
-                "[atrea-diag] R_5 preset sync: initial H10704 (pre-setMode) = %s",
+            LOGGER.debug(
+                "R_5 preset sync: initial H10704 (pre-setMode) = %s",
                 initial_h10704_pre,
             )
 
@@ -636,8 +636,8 @@ class AtreaDevice(ClimateEntity):
         # switch). Then idempotent setPower with the new value harmonizes
         # H10714 with H10704.
         if self._is_r5 and initial_h10704_pre is not None:
-            LOGGER.warning(
-                "[atrea-diag] R_5 preset sync: polling for H10704 to change from %s",
+            LOGGER.debug(
+                "R_5 preset sync: polling for H10704 to change from %s",
                 initial_h10704_pre,
             )
             new_h10704 = None
@@ -653,8 +653,8 @@ class AtreaDevice(ClimateEntity):
                 )
                 if current is not None and current != initial_h10704_pre:
                     new_h10704 = current
-                    LOGGER.warning(
-                        "[atrea-diag] R_5 preset sync: H10704 changed to %s after %ds",
+                    LOGGER.debug(
+                        "R_5 preset sync: H10704 changed to %s after %ds",
                         current,
                         (attempt + 1) * 5,
                     )
@@ -663,8 +663,8 @@ class AtreaDevice(ClimateEntity):
                 self.atrea.commands.clear()
                 power_int = int(new_h10704)
                 ok = self.atrea.setPower(power_int)
-                LOGGER.warning(
-                    "[atrea-diag] R_5 preset sync: setPower(%d) returned %s",
+                LOGGER.debug(
+                    "R_5 preset sync: setPower(%d) returned %s",
                     power_int,
                     ok,
                 )
@@ -677,8 +677,11 @@ class AtreaDevice(ClimateEntity):
                 self.manualUpdate()
                 self.updatePending = False
             else:
+                # Timeout — physical preset switch didn't complete in 60s, or
+                # Atrea kept the same H10704 value (compatible across presets).
+                # Sync skipped — H10714 stays stale but it's just informational.
                 LOGGER.warning(
-                    "[atrea-diag] R_5 preset sync: H10704 unchanged after 60s (12×5s), skipping sync"
+                    "R_5 preset sync: H10704 unchanged after 60s, skipping sync"
                 )
 
     async def async_set_temperature(self, **kwargs):
