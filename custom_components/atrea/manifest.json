@@ -4,12 +4,13 @@
   "documentation": "https://github.com/JurajNyiri/HomeAssistant-Atrea",
   "dependencies": [],
   "codeowners": [
-    "@JurajNyiri"
+    "@JurajNyiri",
+    "@mposchl"
   ],
   "requirements": [
-    "pyatrea==0.9.9"
+    "pyatrea @ git+https://github.com/mposchl/pyatrea.git@master"
   ],
-  "version": "6.1.8-cz2-r5",
+  "version": "6.1.8-cz4",
   "config_flow": true,
   "homeassistant": "2022.4.0"
 }

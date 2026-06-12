@@ -6,7 +6,7 @@ from homeassistant.util import slugify
 from homeassistant.components.climate.const import HVACAction
 
 
-from custom_components.atrea.utils import processFanModes
+from .utils import processFanModes
 
 try:
     from homeassistant.components.climate import ClimateEntity, PLATFORM_SCHEMA
@@ -455,15 +455,22 @@ class AtreaDevice(ClimateEntity):
                 current_preset_en = ALL_PRESET_LIST[self._current_preset]
             fan_value = r5_fan_value_for_preset(current_preset_en, fan_mode)
             if fan_value is None:
-                LOGGER.warn("Unsupported R_5 fan_mode='%s' for preset='%s'", fan_mode, current_preset_en)
+                LOGGER.warning(
+                    "Unsupported R_5 fan_mode='%s' for preset='%s'",
+                    fan_mode,
+                    current_preset_en,
+                )
                 return
 
+            # Začínáme čistou dávkou — pyatrea akumuluje self.commands napříč
+            # set* voláními a exec() je posílá všechna najednou. Bez clear()
+            # bychom mohli odeslat stale commands z předchozích volání.
+            self.atrea.commands.clear()
             if (
                 await self.hass.async_add_executor_job(self.atrea.getProgram)
                 == AtreaProgram.WEEKLY
             ):
                 self.atrea.setProgram(AtreaProgram.TEMPORARY)
-            # pyatrea setPower akceptuje raw H10708/H10714 hodnotu
             self.atrea.setPower(fan_value)
 
             self.updatePending = True
@@ -481,6 +488,7 @@ class AtreaDevice(ClimateEntity):
         if fan_percent > 100:
             fan_percent = 100
         if fan_percent >= 12 and fan_percent <= 100:
+            self.atrea.commands.clear()
             if (
                 await self.hass.async_add_executor_job(self.atrea.getProgram)
                 == AtreaProgram.WEEKLY
@@ -495,9 +503,10 @@ class AtreaDevice(ClimateEntity):
             self.updatePending = False
             self.manualUpdate()
         else:
-            LOGGER.warn("Power out of range (12,100)")
+            LOGGER.warning("Power out of range (12,100)")
 
     async def async_turn_on(self):
+        self.atrea.commands.clear()
         if self.air_handling_control == "Manual":
             self.atrea.setProgram(AtreaProgram.MANUAL)
             self._current_hvac_mode = HVACMode.FAN_ONLY
@@ -517,6 +526,7 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
     async def async_turn_off(self):
+        self.atrea.commands.clear()
         if self.air_handling_control == "Manual":
             self.atrea.setProgram(AtreaProgram.MANUAL)
         elif self.air_handling_control == "Temporary":
@@ -535,6 +545,7 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
     async def async_set_hvac_mode(self, hvac_mode):
+        self.atrea.commands.clear()
         mode = None
         program = None
         if hvac_mode == HVACMode.AUTO:
@@ -572,8 +583,10 @@ class AtreaDevice(ClimateEntity):
         try:
             mode = AtreaMode(ALL_PRESET_LIST.index(preset_en))
         except ValueError:
-            LOGGER.warn("Chosen preset=%s is incorrect preset.", str(preset_mode))
+            LOGGER.warning("Chosen preset=%s is incorrect preset.", str(preset_mode))
             return
+
+        self.atrea.commands.clear()
 
         if mode == AtreaMode.OFF:
             await self.async_turn_off()
@@ -598,6 +611,7 @@ class AtreaDevice(ClimateEntity):
         if temperature is None:
             return
         elif temperature >= 10 and temperature <= 40:
+            self.atrea.commands.clear()
             self.atrea.setTemperature(temperature)
             self.updatePending = True
             await self.hass.async_add_executor_job(self.atrea.exec)
@@ -606,7 +620,7 @@ class AtreaDevice(ClimateEntity):
             self.manualUpdate()
             self.updatePending = False
         else:
-            LOGGER.warn(
+            LOGGER.warning(
                 "Chosen temperature=%s is incorrect. It needs to be between 10 and 40.",
                 str(temperature),
             )
