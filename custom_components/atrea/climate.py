@@ -577,6 +577,11 @@ class AtreaDevice(ClimateEntity):
         self.updatePending = False
 
     async def async_set_preset_mode(self, preset_mode):
+        LOGGER.warning(
+            "[atrea-diag] async_set_preset_mode called with %s (is_r5=%s)",
+            preset_mode,
+            self._is_r5,
+        )
         # UI dropdown vrací CZ label — reverse map na EN ID před lookup do AtreaMode
         preset_en = _from_cz(preset_mode)
         mode = None
@@ -622,15 +627,18 @@ class AtreaDevice(ClimateEntity):
             current_power = await self.hass.async_add_executor_job(
                 self.atrea.getValue, "H10704"
             )
-            LOGGER.debug(
-                "R_5 preset sync: H10704 after preset change = %s", current_power
+            LOGGER.warning(
+                "[atrea-diag] R_5 preset sync: H10704 after preset change = %s",
+                current_power,
             )
             if current_power is not None:
                 self.atrea.commands.clear()
                 power_int = int(current_power)
                 ok = self.atrea.setPower(power_int)
-                LOGGER.debug(
-                    "R_5 preset sync: setPower(%d) returned %s", power_int, ok
+                LOGGER.warning(
+                    "[atrea-diag] R_5 preset sync: setPower(%d) returned %s",
+                    power_int,
+                    ok,
                 )
                 self.updatePending = True
                 await self.hass.async_add_executor_job(self.atrea.exec)
