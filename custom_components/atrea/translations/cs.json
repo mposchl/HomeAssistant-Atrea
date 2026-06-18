@@ -84,6 +84,29 @@
         "name": "Reset intervalu výměny filtru"
       }
     },
+    "sensor": {
+      "hp_voltage": {
+        "name": "Napětí TČ"
+      },
+      "flow_sup_req": {
+        "name": "Požadovaný průtok přívod (SUP)"
+      },
+      "flow_sup_act": {
+        "name": "Aktuální průtok přívod (SUP)"
+      },
+      "flow_eta_req": {
+        "name": "Požadovaný průtok odtah (ETA)"
+      },
+      "flow_eta_act": {
+        "name": "Aktuální průtok odtah (ETA)"
+      },
+      "flow_oda_req": {
+        "name": "Požadovaný průtok venkovní (ODA)"
+      },
+      "flow_oda_act": {
+        "name": "Aktuální průtok venkovní (ODA)"
+      }
+    },
     "climate": {
       "atrea": {
         "state": {
