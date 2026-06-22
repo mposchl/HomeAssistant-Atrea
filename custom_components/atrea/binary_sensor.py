@@ -1,10 +1,12 @@
-"""Binary sensors pro Atrea — momentálně 2 entity pro detekci výměny filtru.
+"""Binary sensors pro Atrea — výměna filtru + alarmy (device_class=problem).
 
 Z RD5 specs (tab.9 Alarmy a upozornění):
 - D11122 = Zanesený filtr (TR mode — tlakové čidlo přes filtr).
 - D11183 = Interval výměny filtru (Perioda mode — uplynul nastavený interval H10910).
+- D11114 = Nevyrovnaný průtok (alarm) — jednotka se kvůli němu vypíná. Reset přes
+  tlačítko C10006 (viz button.py).
 
-Atrea může běžet buď v TR módu (= D11122 reaguje na fyzické zanesení) nebo
+Atrea filtr může běžet buď v TR módu (= D11122 reaguje na fyzické zanesení) nebo
 Perioda módu (= D11183 reaguje na uplynulý interval, default 90 dní). Nastavení
 je v registru H10512. Vystavujeme oba flagy — user uvidí ten relevantní podle
 toho, který mód jeho jednotka má aktivní (a druhý zůstane vždy off).
@@ -20,7 +22,7 @@ from homeassistant.util import slugify
 from .const import DOMAIN, LOGGER
 
 
-FILTER_BINARY_SENSORS = [
+PROBLEM_BINARY_SENSORS = [
     {
         "register": "D11122",
         "key": "filter_dirty",
@@ -33,18 +35,24 @@ FILTER_BINARY_SENSORS = [
         "name": "Filtr — interval výměny",
         "translation_key": "filter_period_expired",
     },
+    {
+        "register": "D11114",
+        "key": "unbalanced_flow",
+        "name": "Nevyrovnaný průtok",
+        "translation_key": "unbalanced_flow",
+    },
 ]
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     entities = [
-        AtreaFilterBinarySensor(data, entry, spec) for spec in FILTER_BINARY_SENSORS
+        AtreaProblemBinarySensor(data, entry, spec) for spec in PROBLEM_BINARY_SENSORS
     ]
     async_add_entities(entities)
 
 
-class AtreaFilterBinarySensor(CoordinatorEntity, BinarySensorEntity):
+class AtreaProblemBinarySensor(CoordinatorEntity, BinarySensorEntity):
     _attr_device_class = BinarySensorDeviceClass.PROBLEM
     _attr_has_entity_name = True
 

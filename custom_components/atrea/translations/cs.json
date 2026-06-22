@@ -77,11 +77,17 @@
       },
       "filter_period_expired": {
         "name": "Filtr — interval výměny"
+      },
+      "unbalanced_flow": {
+        "name": "Nevyrovnaný průtok"
       }
     },
     "button": {
       "filter_reset": {
         "name": "Reset intervalu výměny filtru"
+      },
+      "alarm_reset": {
+        "name": "Reset alarmů"
       }
     },
     "sensor": {
