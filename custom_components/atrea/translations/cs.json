@@ -88,6 +88,9 @@
       "hp_voltage": {
         "name": "Napětí TČ"
       },
+      "outdoor_temp": {
+        "name": "Venkovní teplota"
+      },
       "flow_sup_req": {
         "name": "Požadovaný průtok přívod (SUP)"
       },
