@@ -1,12 +1,14 @@
-"""Button entity pro Atrea — reset filtru (C10007) + reset alarmů (C10006).
+"""Button entity pro Atrea — reset filtru (C10007) + reset alarmů (C10005).
 
 Z RD5 specs:
 - C10007 (tab.11): zapsání 1 nastaví další interval výměny filtru podle H10910
   (defaultně 90 dní). User stiskne po fyzické výměně filtru → RD5 restartuje
   clock a D11183 přepne zpět na 0.
-- C10006: zapsání 1 provede reset vybraných alarmů (např. nevyrovnaný průtok
-  D11114, porucha manometru D11105 — viz serv. dokumentace). User stiskne po
-  odstranění příčiny, aby se jednotka znovu spustila.
+- C10005: zapsání 1 provede reset alarmů (např. nevyrovnaný průtok D11114).
+  Tohle reálně používá web UI (`xml.cgi?...&C1000500001`). POZOR: v RD5 PDF
+  dokumentaci NENÍ — dokumentace uvádí C10006 „reset vybraných alarmů", ale ten
+  D11114 neshodí. C10005 (z odposlechu UI) funguje. User stiskne po odstranění
+  příčiny, aby se jednotka znovu spustila.
 """
 
 from homeassistant.components.button import ButtonEntity
@@ -71,9 +73,10 @@ class AtreaAlarmResetButton(ButtonEntity):
         return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
 
     async def async_press(self):
-        """Zapíše 1 do C10006 — reset vybraných alarmů (např. D11114)."""
-        LOGGER.info("Atrea: pressing reset alarms (C10006=1)")
+        """Zapíše 1 do C10005 — reset alarmů (např. D11114). C10005 = registr
+        z odposlechu web UI; PDF dokumentuje C10006, ale ten D11114 neshodí."""
+        LOGGER.info("Atrea: pressing reset alarms (C10005=1)")
         self._atrea.commands.clear()
-        self._atrea.setCommand("C10006", 1)
+        self._atrea.setCommand("C10005", 1)
         await self.hass.async_add_executor_job(self._atrea.exec)
         await self._coordinator.async_refresh()

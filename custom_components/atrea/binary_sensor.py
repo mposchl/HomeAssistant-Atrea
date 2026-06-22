@@ -4,7 +4,7 @@ Z RD5 specs (tab.9 Alarmy a upozornění):
 - D11122 = Zanesený filtr (TR mode — tlakové čidlo přes filtr).
 - D11183 = Interval výměny filtru (Perioda mode — uplynul nastavený interval H10910).
 - D11114 = Nevyrovnaný průtok (alarm) — jednotka se kvůli němu vypíná. Reset přes
-  tlačítko C10006 (viz button.py).
+  tlačítko C10005 (registr z odposlechu web UI; viz button.py).
 
 Atrea filtr může běžet buď v TR módu (= D11122 reaguje na fyzické zanesení) nebo
 Perioda módu (= D11183 reaguje na uplynulý interval, default 90 dní). Nastavení
