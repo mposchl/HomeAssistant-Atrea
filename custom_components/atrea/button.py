@@ -46,10 +46,14 @@ class AtreaFilterResetButton(ButtonEntity):
         return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
 
     async def async_press(self):
-        """Zapíše 1 do C10007 — Atrea restartuje filter clock."""
+        """Zapíše 1 do C10007 — Atrea restartuje filter clock.
+
+        Pozor: NEpoužívat pyatrea `setCommand` — ten má guard `if id in status`,
+        a write-only akční coily (C10007) nejsou ve status → tiše se zahodí.
+        Píšeme přímo do `commands` dictu (= obchází guard, exec to pošle)."""
         LOGGER.info("Atrea: pressing reset filter interval (C10007=1)")
         self._atrea.commands.clear()
-        self._atrea.setCommand("C10007", 1)
+        self._atrea.commands["C10007"] = f"{1:05}"
         await self.hass.async_add_executor_job(self._atrea.exec)
         await self._coordinator.async_refresh()
 
@@ -74,9 +78,12 @@ class AtreaAlarmResetButton(ButtonEntity):
 
     async def async_press(self):
         """Zapíše 1 do C10005 — reset alarmů (např. D11114). C10005 = registr
-        z odposlechu web UI; PDF dokumentuje C10006, ale ten D11114 neshodí."""
+        z odposlechu web UI; PDF dokumentuje C10006, ale ten D11114 neshodí.
+
+        Pozor: NEpoužívat pyatrea `setCommand` — guard `if id in status` zahodí
+        write-only coil C10005 (není ve status). Píšeme přímo do `commands`."""
         LOGGER.info("Atrea: pressing reset alarms (C10005=1)")
         self._atrea.commands.clear()
-        self._atrea.setCommand("C10005", 1)
+        self._atrea.commands["C10005"] = f"{1:05}"
         await self.hass.async_add_executor_job(self._atrea.exec)
         await self._coordinator.async_refresh()
