@@ -100,9 +100,6 @@
       "supply_temp": {
         "name": "Teplota přívod (SUP)"
       },
-      "extract_temp": {
-        "name": "Teplota odtah (ETA)"
-      },
       "inside_temp": {
         "name": "Vnitřní teplota (IDA)"
       },

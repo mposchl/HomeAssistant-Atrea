@@ -97,12 +97,6 @@ TEMP_SENSORS = [
         "translation_key": "supply_temp",
     },
     {
-        "register": "I10213",
-        "key": "extract_temp",
-        "name": "Teplota odtah (ETA)",
-        "translation_key": "extract_temp",
-    },
-    {
         "register": "I10215",
         "key": "inside_temp",
         "name": "Vnitřní teplota (IDA)",
