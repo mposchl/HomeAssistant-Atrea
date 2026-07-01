@@ -114,7 +114,7 @@ TEMP_SENSORS = [
 # Vnucený stav (H10712) — pyatrea getForcedMode() mapuje jen podmnožinu (viz
 # loadSupportedForcedModes). Mapa AtreaMode.name → CZ; neznámé → "Stav {raw}".
 FORCED_MODE_CZ = {
-    "OFF": "Vypnuto",
+    "OFF": "Nic",
     "AUTOMATIC": "Automatický",
     "VENTILATION": "Větrání",
     "CIRCULATION_AND_VENTILATION": "Cirkulace s větráním",
@@ -318,7 +318,7 @@ class AtreaForcedModeSensor(CoordinatorEntity, SensorEntity):
         except (TypeError, ValueError):
             return None
         if raw == 0:
-            return "Vypnuto"
+            return "Nic"
         modes = getattr(self._atrea, "forcedModes", None)
         if modes:
             mode = modes.get(raw)
