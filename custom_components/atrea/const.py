@@ -139,23 +139,43 @@ R5_FAN_GENERIC = {
 }
 
 # Reverse mapping pro decode H10704 read value → label
-def r5_decode_fan_value(value):
-    """Decode H10704 numeric value na human-readable label."""
+def r5_decode_fan_value(value, preset_en=None):
+    """Decode H10704 numeric value na human-readable label.
+
+    preset_en (volitelný): aktuální předvolba. Při přepínání H10704 chvíli drží
+    hodnotu STARÉ předvolby (jiný formát) — dekódovaná hodnota pak není v
+    fan_modes nové předvolby → dropdown se „rozbije" na prázdno. Když je preset
+    zadaný, zkoerceujeme hodnotu tak, aby vždy patřila do jeho seznamu:
+    kombinaci (cirk/vět) rozložíme na komponentu odpovídající předvolbě, a
+    naopak single hodnotu v kombinované předvolbě zdvojíme na combo.
+    """
     if value is None:
         return None
     v = int(value)
     if v == 0:
         return "Vypnuto"
-    elif 10 <= v <= 12:
-        return {10: "Min", 11: "Norm", 12: "Max"}[v]
+    levels = {0: "Min", 1: "Norm", 2: "Max"}
+    # Kombinace cirk+vět (30-38), formát "cirkulace/větrání"
+    if 30 <= v <= 38:
+        circ = levels[(v - 30) // 3]
+        vent = levels[(v - 30) % 3]
+        if preset_en == "Circulation":
+            return circ
+        if preset_en in (None, "Circulation and Ventilation"):
+            return f"{circ}/{vent}"
+        # Ventilation / Automatic / generic single-fan → větrací komponenta
+        return vent
+    # Single: větrání (10-12) nebo cirkulace (20-22)
+    if 10 <= v <= 12:
+        single = levels[v - 10]
     elif 20 <= v <= 22:
-        return {20: "Min", 21: "Norm", 22: "Max"}[v]
-    elif 30 <= v <= 38:
-        labels = ["Min/Min", "Min/Norm", "Min/Max",
-                  "Norm/Min", "Norm/Norm", "Norm/Max",
-                  "Max/Min", "Max/Norm", "Max/Max"]
-        return labels[v - 30]
-    return f"Neznámý ({v})"
+        single = levels[v - 20]
+    else:
+        return f"Neznámý ({v})"
+    # Opačný směr: single hodnota, ale předvolba je kombinovaná → udělej combo
+    if preset_en == "Circulation and Ventilation":
+        return f"{single}/{single}"
+    return single
 
 
 def r5_fan_modes_for_preset(preset_en):

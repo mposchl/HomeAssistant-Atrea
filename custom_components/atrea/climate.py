@@ -370,11 +370,24 @@ class AtreaDevice(ClimateEntity):
                 self._requested_power = int(self.atrea.getValue("H01005"))
 
             if self._is_r5:
-                # R_5 mode: read H10704 → decode na discrete label
+                # R_5 mode: read H10704 → decode na discrete label.
+                # Aktuální preset (EN) pro kontextový dekód — H10704 může při
+                # přepínání ještě držet hodnotu staré předvolby (lag), pak by
+                # dekódovaná hodnota nebyla ve fan_modes → prázdný dropdown.
+                mode_now = self.atrea.getMode()
+                preset_en_now = (
+                    ALL_PRESET_LIST[mode_now]
+                    if mode_now is not None and mode_now < len(ALL_PRESET_LIST)
+                    else None
+                )
                 if "H10704" in status:
-                    self._current_fan_mode = r5_decode_fan_value(self.atrea.getValue("H10704"))
+                    self._current_fan_mode = r5_decode_fan_value(
+                        self.atrea.getValue("H10704"), preset_en_now
+                    )
                 else:
-                    self._current_fan_mode = r5_decode_fan_value(self._requested_power)
+                    self._current_fan_mode = r5_decode_fan_value(
+                        self._requested_power, preset_en_now
+                    )
             else:
                 # Duplex mode: zachovat procenta logiku
                 if "H01001" in status:
