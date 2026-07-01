@@ -591,6 +591,11 @@ class AtreaDevice(ClimateEntity):
             LOGGER.warning("Chosen preset=%s is incorrect preset.", str(preset_mode))
             return
 
+        # cz23: „Přepínám" indikátor — on po celou dobu operace (vč. 60s
+        # sync loopu níže). Sdílený flag v data dictu čte AtreaSwitchingBinarySensor.
+        self.data["switching"] = True
+        self._coordinator.async_update_listeners()
+
         # Capture H10704 BEFORE setMode so the sync poller below has a
         # reliable baseline to detect when Atrea has applied the new
         # preset's auto-default value. If we captured after setMode +
@@ -683,6 +688,10 @@ class AtreaDevice(ClimateEntity):
                 LOGGER.warning(
                     "R_5 preset sync: H10704 unchanged after 60s, skipping sync"
                 )
+
+        # cz23: konec operace — zhasnout „Přepínám"
+        self.data["switching"] = False
+        self._coordinator.async_update_listeners()
 
     async def async_set_temperature(self, **kwargs):
         """Set new target temperature."""

@@ -49,6 +49,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = [
         AtreaProblemBinarySensor(data, entry, spec) for spec in PROBLEM_BINARY_SENSORS
     ]
+    entities.append(AtreaSwitchingBinarySensor(data, entry))
     async_add_entities(entities)
 
 
@@ -91,4 +92,32 @@ class AtreaProblemBinarySensor(CoordinatorEntity, BinarySensorEntity):
     def device_info(self):
         # Share device with the climate entity so all Atrea entities cluster
         # under one device card in HA UI.
+        return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
+
+
+class AtreaSwitchingBinarySensor(CoordinatorEntity, BinarySensorEntity):
+    """„Přepínám" — on po dobu preset operace (60s sync loop v climate).
+
+    Čte sdílený flag data["switching"], který climate nastavuje kolem
+    async_set_preset_mode a notifikuje přes coordinator.async_update_listeners().
+    Slouží k UI indikaci „něco se děje" i když jednotka nehlásí náběh (H10712).
+    """
+
+    _attr_device_class = BinarySensorDeviceClass.RUNNING
+    _attr_has_entity_name = True
+    _attr_name = "Přepínám"
+    _attr_icon = "mdi:sync"
+
+    def __init__(self, data, entry):
+        super().__init__(data["coordinator"])
+        self._data = data
+        self._ip = entry.data.get("ip_address")
+        self._attr_unique_id = slugify(f"atrea_{self._ip}_switching")
+
+    @property
+    def is_on(self):
+        return bool(self._data.get("switching"))
+
+    @property
+    def device_info(self):
         return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
