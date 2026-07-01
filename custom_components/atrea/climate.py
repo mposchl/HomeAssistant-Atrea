@@ -47,6 +47,7 @@ from .const import (
     r5_decode_fan_value,
     r5_fan_modes_for_preset,
     r5_fan_value_for_preset,
+    r5_map_power_to_preset,
 )
 
 
@@ -643,49 +644,30 @@ class AtreaDevice(ClimateEntity):
         self.manualUpdate()
         self.updatePending = False
 
-        # Sync requested power (H10714) with actual (H10704) after preset change.
-        # Atrea autoapplies a sensible default to H10704 after physically
-        # switching dampers (can take 30+s). H10714 keeps the previous
-        # request value, leaving 'requested_power' attribute inconsistent
-        # with the unit's actual state.
-        #
-        # Strategy: capture initial H10704 BEFORE we read fresh status, then
-        # poll up to 60s waiting for it to change (= Atrea finished the
-        # switch). Then idempotent setPower with the new value harmonizes
-        # H10714 with H10704.
-        if self._is_r5 and initial_h10704_pre is not None:
-            LOGGER.debug(
-                "R_5 preset sync: polling for H10704 to change from %s",
-                initial_h10704_pre,
+        # cz25: level-preserving výkon při změně předvolby.
+        # Místo čekání až 60 s na Atreu (během něhož se jednotka umí vypnout a
+        # čekat na výkon) rovnou dosadíme rozumný výkon v kódování NOVÉ předvolby
+        # se zachováním úrovně (Min/Norm/Max) z výkonu PŘED přepnutím
+        # (initial_h10704_pre). Jednotka tak nespadne do off a fan_mode je hned
+        # platný pro nový fan_modes seznam.
+        if (
+            self._is_r5
+            and initial_h10704_pre is not None
+            and mode != AtreaMode.OFF
+        ):
+            preset_en = (
+                ALL_PRESET_LIST[mode] if mode < len(ALL_PRESET_LIST) else None
             )
-            new_h10704 = None
-            # 5s polling interval per RD5 spec (PDF, "alespoň 5s interval mezi
-            # relacemi"), max 12 attempts = 60s ceiling for the physical preset
-            # switch (damper rotation can take that long on R-5 series).
-            for attempt in range(12):
-                await self.hass.async_add_executor_job(time.sleep, 5.0)
-                # Force fresh status — pyatrea caches by default.
-                await self.hass.async_add_executor_job(self.atrea.getStatus, False)
-                current = await self.hass.async_add_executor_job(
-                    self.atrea.getValue, "H10704"
-                )
-                if current is not None and current != initial_h10704_pre:
-                    new_h10704 = current
-                    LOGGER.debug(
-                        "R_5 preset sync: H10704 changed to %s after %ds",
-                        current,
-                        (attempt + 1) * 5,
-                    )
-                    break
-            if new_h10704 is not None:
+            target_power = r5_map_power_to_preset(initial_h10704_pre, preset_en)
+            LOGGER.debug(
+                "R_5 preset sync: mapuji výkon %s → %s (preset %s)",
+                initial_h10704_pre,
+                target_power,
+                preset_en,
+            )
+            if target_power is not None:
                 self.atrea.commands.clear()
-                power_int = int(new_h10704)
-                ok = self.atrea.setPower(power_int)
-                LOGGER.debug(
-                    "R_5 preset sync: setPower(%d) returned %s",
-                    power_int,
-                    ok,
-                )
+                self.atrea.setPower(int(target_power))
                 self.updatePending = True
                 await self.hass.async_add_executor_job(self.atrea.exec)
                 await self._coordinator.async_refresh()
@@ -694,13 +676,6 @@ class AtreaDevice(ClimateEntity):
                 )
                 self.manualUpdate()
                 self.updatePending = False
-            else:
-                # Timeout — physical preset switch didn't complete in 60s, or
-                # Atrea kept the same H10704 value (compatible across presets).
-                # Sync skipped — H10714 stays stale but it's just informational.
-                LOGGER.warning(
-                    "R_5 preset sync: H10704 unchanged after 60s, skipping sync"
-                )
 
         # cz23: konec operace — zhasnout „Přepínám"
         self.data["switching"] = False

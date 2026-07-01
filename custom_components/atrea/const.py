@@ -208,3 +208,50 @@ def r5_fan_value_for_preset(preset_en, fan_label):
         return R5_FAN_CIRC_VENT.get(fan_label)
     else:
         return R5_FAN_GENERIC.get(fan_label)
+
+
+def _r5_levels(v):
+    """Rozloží H10704 hodnotu na (circ_level, vent_level), 0=Min/1=Norm/2=Max.
+    Pro single vrátí jen relevantní složku, druhá = None."""
+    if 10 <= v <= 12:
+        return (None, v - 10)   # větrání single
+    if 20 <= v <= 22:
+        return (v - 20, None)   # cirkulace single
+    if 30 <= v <= 38:
+        return ((v - 30) // 3, (v - 30) % 3)  # kombinace cirk/vět
+    return (None, None)
+
+
+def r5_map_power_to_preset(old_value, target_en):
+    """Level-preserving mapování výkonu při změně předvolby.
+
+    Vezme výkon PŘED přepnutím (old_value = H10704) a překóduje jeho úroveň
+    (Min/Norm/Max) do rozsahu nové předvolby, aby jednotka po přepnutí běžela
+    dál (nespadla do off) a hodnota byla platná pro nový fan_modes seznam.
+
+    - 0 (vypnuto) → 0 (zůstává vypnuto)
+    - → Cirkulace: 20 + cirk. úroveň (z combo cirk složka; ze single ta úroveň)
+    - → Cirk+vět: 30 + circ*3 + vent (single → ta složka, druhá Min)
+    - → Větrání / generic: 10 + vět. úroveň (z combo vět složka)
+    Vrací None pro neznámou hodnotu (volající pak nechá stávající chování).
+    """
+    if old_value is None:
+        return None
+    v = int(old_value)
+    if v == 0:
+        return 0
+    cl, vl = _r5_levels(v)
+    if cl is None and vl is None:
+        return None
+    if target_en == "Off":
+        return 0
+    if target_en == "Circulation":
+        lvl = cl if cl is not None else vl
+        return 20 + lvl
+    if target_en == "Circulation and Ventilation":
+        circ = cl if cl is not None else 0
+        vent = vl if vl is not None else 0
+        return 30 + circ * 3 + vent
+    # Větrání / Automatický / generic (Noční předchlazení, ...)
+    lvl = vl if vl is not None else cl
+    return 10 + lvl
