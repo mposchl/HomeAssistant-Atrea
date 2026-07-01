@@ -610,18 +610,16 @@ class AtreaDevice(ClimateEntity):
         self.data["switching"] = True
         self._coordinator.async_update_listeners()
 
-        # Capture H10704 BEFORE setMode so the sync poller below has a
-        # reliable baseline to detect when Atrea has applied the new
-        # preset's auto-default value. If we captured after setMode +
-        # refresh, Atrea may have already updated H10704 and we'd then
-        # wait for a second change that never comes.
+        # Zachyť H10704 (výkon) PŘED přepnutím — z jeho úrovně (Min/Norm/Max)
+        # pak mapujeme cílový výkon nové předvolby (cz26 níže). Po setMode už
+        # by hodnota mohla být Atreou přepsaná.
         initial_h10704_pre = None
         if self._is_r5:
             initial_h10704_pre = await self.hass.async_add_executor_job(
                 self.atrea.getValue, "H10704"
             )
             LOGGER.debug(
-                "R_5 preset sync: initial H10704 (pre-setMode) = %s",
+                "R_5 preset switch: initial H10704 (pre-setMode) = %s",
                 initial_h10704_pre,
             )
 
@@ -637,19 +635,12 @@ class AtreaDevice(ClimateEntity):
         if mode != await self.hass.async_add_executor_job(self.atrea.getMode):
             self.atrea.setMode(mode)
 
-        self.updatePending = True
-        await self.hass.async_add_executor_job(self.atrea.exec)
-        await self._coordinator.async_refresh()
-        await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
-        self.manualUpdate()
-        self.updatePending = False
-
-        # cz25: level-preserving výkon při změně předvolby.
-        # Místo čekání až 60 s na Atreu (během něhož se jednotka umí vypnout a
-        # čekat na výkon) rovnou dosadíme rozumný výkon v kódování NOVÉ předvolby
-        # se zachováním úrovně (Min/Norm/Max) z výkonu PŘED přepnutím
-        # (initial_h10704_pre). Jednotka tak nespadne do off a fan_mode je hned
-        # platný pro nový fan_modes seznam.
+        # cz26: výkon do STEJNÉ relace jako mód. Atrea vyžaduje oba příkazy
+        # najednou (jinak min. 5s interval mezi relacemi → lag, a jednotka se
+        # mezitím umí vypnout a čekat na výkon). Mapujeme úroveň (Min/Norm/Max)
+        # z výkonu PŘED přepnutím (initial_h10704_pre) do kódování nové
+        # předvolby a přidáme setPower do TÉHOŽ commands dictu → jeden exec
+        # pošle mód i výkon v jedné relaci.
         if (
             self._is_r5
             and initial_h10704_pre is not None
@@ -660,22 +651,21 @@ class AtreaDevice(ClimateEntity):
             )
             target_power = r5_map_power_to_preset(initial_h10704_pre, preset_en)
             LOGGER.debug(
-                "R_5 preset sync: mapuji výkon %s → %s (preset %s)",
+                "R_5 preset switch: mód %s + výkon %s → %s (preset %s) v jedné relaci",
+                mode,
                 initial_h10704_pre,
                 target_power,
                 preset_en,
             )
             if target_power is not None:
-                self.atrea.commands.clear()
                 self.atrea.setPower(int(target_power))
-                self.updatePending = True
-                await self.hass.async_add_executor_job(self.atrea.exec)
-                await self._coordinator.async_refresh()
-                await self.hass.async_add_executor_job(
-                    time.sleep, UPDATE_DELAY / 1000
-                )
-                self.manualUpdate()
-                self.updatePending = False
+
+        self.updatePending = True
+        await self.hass.async_add_executor_job(self.atrea.exec)
+        await self._coordinator.async_refresh()
+        await self.hass.async_add_executor_job(time.sleep, UPDATE_DELAY / 1000)
+        self.manualUpdate()
+        self.updatePending = False
 
         # cz23: konec operace — zhasnout „Přepínám"
         self.data["switching"] = False
