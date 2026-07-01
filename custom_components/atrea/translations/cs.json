@@ -97,6 +97,15 @@
       "outdoor_temp": {
         "name": "Venkovní teplota"
       },
+      "supply_temp": {
+        "name": "Teplota přívod (SUP)"
+      },
+      "extract_temp": {
+        "name": "Teplota odtah (ETA)"
+      },
+      "inside_temp": {
+        "name": "Vnitřní teplota (IDA)"
+      },
       "flow_sup_req": {
         "name": "Požadovaný průtok přívod (SUP)"
       },

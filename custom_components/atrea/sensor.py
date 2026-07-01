@@ -90,7 +90,51 @@ TEMP_SENSORS = [
         "name": "Venkovní teplota",
         "translation_key": "outdoor_temp",
     },
+    {
+        "register": "I10212",
+        "key": "supply_temp",
+        "name": "Teplota přívod (SUP)",
+        "translation_key": "supply_temp",
+    },
+    {
+        "register": "I10213",
+        "key": "extract_temp",
+        "name": "Teplota odtah (ETA)",
+        "translation_key": "extract_temp",
+    },
+    {
+        "register": "I10215",
+        "key": "inside_temp",
+        "name": "Vnitřní teplota (IDA)",
+        "translation_key": "inside_temp",
+    },
 ]
+
+
+# Vnucený stav (H10712) — pyatrea getForcedMode() mapuje jen podmnožinu (viz
+# loadSupportedForcedModes). Mapa AtreaMode.name → CZ; neznámé → "Stav {raw}".
+FORCED_MODE_CZ = {
+    "OFF": "Vypnuto",
+    "AUTOMATIC": "Automatický",
+    "VENTILATION": "Větrání",
+    "CIRCULATION_AND_VENTILATION": "Cirkulace s větráním",
+    "CIRCULATION": "Cirkulace",
+    "NIGHT_PRECOOLING": "Noční předchlazení",
+    "DISBALANCE": "Rozvážení",
+    "OVERPRESSURE": "Přetlakové větrání",
+    "PERIODIC_VENTILATION": "Periodické větrání",
+    "STARTUP": "Náběh",
+    "RUNDOWN": "Doběh",
+    "DEFROSTING": "Odmrazování",
+    "HP_DEFROSTING": "Odmrazování TČ",
+    "EXTERNAL": "Externí",
+    "IN1": "Vstup 1",
+    "IN2": "Vstup 2",
+    "D1": "D1",
+    "D2": "D2",
+    "D3": "D3",
+    "D4": "D4",
+}
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -98,6 +142,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
     entities = [AtreaVoltageSensor(data, entry, spec) for spec in VOLTAGE_SENSORS]
     entities += [AtreaFlowSensor(data, entry, spec) for spec in FLOW_SENSORS]
     entities += [AtreaTemperatureSensor(data, entry, spec) for spec in TEMP_SENSORS]
+    entities.append(AtreaForcedModeSensor(data, entry))
     async_add_entities(entities)
 
 
@@ -242,4 +287,51 @@ class AtreaTemperatureSensor(CoordinatorEntity, SensorEntity):
     def device_info(self):
         # Share device with the climate entity so all Atrea entities cluster
         # under one device card in HA UI.
+        return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
+
+
+class AtreaForcedModeSensor(CoordinatorEntity, SensorEntity):
+    """Vnucený stav jednotky (H10712) — náběh, doběh, noční předchlazení, …
+
+    Mapuje přes pyatrea forcedModes (getSupportedForcedModes → AtreaMode);
+    neznámé hodnoty zobrazí jako "Stav {raw}" pro doidentifikování.
+    """
+
+    _attr_has_entity_name = True
+    _attr_name = "Vnucený stav"
+    _attr_icon = "mdi:autorenew"
+
+    def __init__(self, data, entry):
+        super().__init__(data["coordinator"])
+        self._data = data
+        self._atrea = data["atrea"]
+        self._ip = entry.data.get("ip_address")
+        self._attr_unique_id = slugify(f"atrea_{self._ip}_forced_mode")
+
+    @property
+    def native_value(self):
+        status = self._data.get("status")
+        if not status or "H10712" not in status:
+            return None
+        try:
+            raw = int(status["H10712"])
+        except (TypeError, ValueError):
+            return None
+        if raw == 0:
+            return "Vypnuto"
+        modes = getattr(self._atrea, "forcedModes", None)
+        if modes:
+            mode = modes.get(raw)
+            if mode is not None:
+                return FORCED_MODE_CZ.get(mode.name, mode.name)
+        # neznámý stav → syrová hodnota pro identifikaci
+        return f"Stav {raw}"
+
+    @property
+    def available(self):
+        status = self._data.get("status")
+        return bool(status) and "H10712" in status
+
+    @property
+    def device_info(self):
         return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
