@@ -22,6 +22,23 @@ from homeassistant.util import slugify
 from .const import DOMAIN, LOGGER
 
 
+# Stavové příznaky, které NEJSOU porucha — jen „tenhle režim teď jde použít".
+# I11401 = jednotka sama hlásí, jestli jsou splněné podmínky pro Noční
+# předchlazení (rozdíl vnitřní/venkovní > 5 °C a požadovaná < aktuální vnitřní).
+# V RD5 dokumentaci ani ve web UI to nikde není vidět, přitom to rozhoduje:
+# když se předvolba zapne bez splněných podmínek, jednotka se VYPNE. Proto to
+# vystavujeme — je to strážce pro „pusť předchlazení" i pro budoucí „teď chlaď".
+STATUS_BINARY_SENSORS = [
+    {
+        "register": "I11401",
+        "key": "night_precooling_available",
+        "name": "Noční předchlazení možné",
+        "translation_key": "night_precooling_available",
+        "icon": "mdi:weather-night",
+    },
+]
+
+
 PROBLEM_BINARY_SENSORS = [
     {
         "register": "D11122",
@@ -48,6 +65,9 @@ async def async_setup_entry(hass, entry, async_add_entities):
     data = hass.data[DOMAIN][entry.entry_id]
     entities = [
         AtreaProblemBinarySensor(data, entry, spec) for spec in PROBLEM_BINARY_SENSORS
+    ]
+    entities += [
+        AtreaStatusBinarySensor(data, entry, spec) for spec in STATUS_BINARY_SENSORS
     ]
     entities.append(AtreaSwitchingBinarySensor(data, entry))
     async_add_entities(entities)
@@ -93,6 +113,20 @@ class AtreaProblemBinarySensor(CoordinatorEntity, BinarySensorEntity):
         # Share device with the climate entity so all Atrea entities cluster
         # under one device card in HA UI.
         return {"identifiers": {(DOMAIN, slugify(f"atrea_{self._ip}"))}}
+
+
+class AtreaStatusBinarySensor(AtreaProblemBinarySensor):
+    """Stavový příznak z jednoho registru — bez device_class „problem".
+
+    Dědí čtení i dostupnost z AtreaProblemBinarySensor, přebíjí jen sémantiku:
+    tohle není porucha, takže se to nesmí objevit v „Problems" badge.
+    """
+
+    _attr_device_class = None
+
+    def __init__(self, data, entry, spec):
+        super().__init__(data, entry, spec)
+        self._attr_icon = spec.get("icon")
 
 
 class AtreaSwitchingBinarySensor(CoordinatorEntity, BinarySensorEntity):

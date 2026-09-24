@@ -80,6 +80,9 @@
       },
       "unbalanced_flow": {
         "name": "Nevyrovnaný průtok"
+      },
+      "night_precooling_available": {
+        "name": "Noční předchlazení možné"
       }
     },
     "button": {
